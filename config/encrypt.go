@@ -1,19 +1,19 @@
 package config
 
 import (
-    "golang.org/x/crypto/bcrypt"
+	"golang.org/x/crypto/bcrypt"
 )
 
 var (
-    PasswordFunc map[string] interface{}
+	PasswordFunc map[string]interface{}
 )
 
 func init() {
-    PasswordFunc = make(map[string] interface{})
-    PasswordFunc["bcrypt"] = BcryptEncrypt
+	PasswordFunc = make(map[string]interface{})
+	PasswordFunc["bcrypt"] = BcryptEncrypt
 }
 
 func BcryptEncrypt(password string, num int) string {
-    hashedPassword, _ := bcrypt.GenerateFromPassword([]byte(password), num)
-    return string(hashedPassword)
+	hashedPassword, _ := bcrypt.GenerateFromPassword([]byte(password), num)
+	return string(hashedPassword)
 }
