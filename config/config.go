@@ -11,3 +11,11 @@ const (
 	DefaultEncryptAlgorithm string = "bcrypt"
 	DefaultTokenDay         uint32 = Day * 7
 )
+
+const (
+	FromMailAddress  string = "admin@ustil.cn"
+	FromMailName     string = "Usso"
+	FromMailPassWord string = "******"
+	SendMailHost     string = "smtp.qq.com"
+	SendMailPort     string = ":465"
+)

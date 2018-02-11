@@ -5,12 +5,12 @@ import (
 )
 
 var (
-	PasswordFunc map[string]interface{}
+	PassWordFunc map[string]interface{}
 )
 
 func init() {
-	PasswordFunc = make(map[string]interface{})
-	PasswordFunc["bcrypt"] = BcryptEncrypt
+	PassWordFunc = make(map[string]interface{})
+	PassWordFunc["bcrypt"] = BcryptEncrypt
 }
 
 func BcryptEncrypt(password string, num int) string {

@@ -11,11 +11,16 @@ import (
 	"strings"
 	"time"
 
+	"usso/config"
+
+	"github.com/satori/go.uuid"
+
 	"github.com/astaxie/beego"
 	"github.com/astaxie/beego/orm"
 	_ "github.com/go-sql-driver/mysql"
-	"github.com/satori/go.uuid"
-	"usso/config"
+	"github.com/scorredoira/email"
+	"net/mail"
+	"net/smtp"
 )
 
 var (
@@ -28,12 +33,12 @@ var (
 type User struct {
 	Id       int
 	Email    string
-	Password string
+	PassWord string
 
 	Token string    `orm:"null"`
 	Time  time.Time `orm:"type(datetime)"`
 
-	Admintype int       `orm:"default(0)"`
+	AdminType int       `orm:"default(0)"`
 	Authtime  time.Time `orm:"type(datetime)"`
 
 	Status int    `orm:"default(0)"`
@@ -71,16 +76,16 @@ func RegsterUser(email string, password string) error {
 	if len(password) >= 20 || len(password) < 6 {
 		return errors.New("密码长度过短")
 	}
-	eamilvaild, _ := regexp.MatchString(`^[a-zA-Z0-9_-]+@[a-zA-Z0-9_-]+(\.[a-zA-Z0-9_-]+)+$`, email)
-	if !eamilvaild {
+	EamilVaild, _ := regexp.MatchString(`^[a-zA-Z0-9_-]+@[a-zA-Z0-9_-]+(\.[a-zA-Z0-9_-]+)+$`, email)
+	if !EamilVaild {
 		return errors.New("邮箱不合法")
 	}
 	_, ok := CheckEmail(email)
 	if ok {
 		return errors.New("邮箱已注册")
 	}
-	savePassword := GetSavePassword(password)
-	user := User{Email: email, Password: savePassword}
+	SavePassWord := GetSavePassWord(password)
+	user := User{Email: email, PassWord: SavePassWord}
 	o.Insert(&user)
 	Users[email] = &user
 	return nil
@@ -91,7 +96,7 @@ func VaildLogin(email string, password string) error {
 	if !ok {
 		return errors.New("用户名不存在或密码错误")
 	}
-	if VaildPassword(password, user.Password) {
+	if VaildPassWord(password, user.PassWord) {
 		return nil
 	}
 	return errors.New("用户名不存在或密码错误")
@@ -142,13 +147,13 @@ func CheckOrmByEmail(Email string) bool {
 	return true
 }
 
-func ChangePd(UserEmail, OldPassword, NewPassword string) bool {
+func ChangePd(UserEmail, OldPassWord, NewPassWord string) bool {
 	user := User{Email: UserEmail}
 	if !CheckOrmByEmail(UserEmail) {
 		return false
-	} else if user.Password == OldPassword {
-		if len(NewPassword) > 6 && len(NewPassword) <= 20 {
-			user.Password = NewPassword
+	} else if user.PassWord == OldPassWord {
+		if len(NewPassWord) > 6 && len(NewPassWord) <= 20 {
+			user.PassWord = NewPassWord
 			return true
 		} else {
 			beego.Error("新密码长度不合要求")
@@ -160,6 +165,25 @@ func ChangePd(UserEmail, OldPassword, NewPassword string) bool {
 	}
 }
 
+func BackPassWord(Email string) string {
+	if !CheckOrmByEmail(Email) {
+		return "email is not exits"
+	}
+	var PassWord string
+	if user, ok := CheckEmail(Email); ok {
+		PassWord = user.PassWord
+	}
+	m := email.NewMessage("PassWord", "you PassWord is: "+PassWord)
+	m.From = mail.Address{Name: config.FromMailName, Address: config.FromMailAddress}
+	m.To = []string{Email}
+	auth := smtp.PlainAuth("", config.FromMailAddress, config.FromMailPassWord, config.SendMailHost)
+	if err := email.Send(config.SendMailHost+config.SendMailPort, auth, m); err != nil {
+		beego.Error(err)
+		return "send fail!"
+	}
+	return "send success!"
+}
+
 func GetUserJsonByEmail(email string) *UserResponse {
 	user := Users[email]
 	now, end := time.Now(), user.Time
@@ -167,7 +191,7 @@ func GetUserJsonByEmail(email string) *UserResponse {
 		Email:     user.Email,
 		Token:     user.Token,
 		Time:      int(end.Sub(now).Seconds()),
-		Admintype: user.Admintype,
+		AdminType: user.AdminType,
 		Status:    user.Status}
 }
 
@@ -178,7 +202,7 @@ func GetUserJsonByToken(token string) *UserResponse {
 		Email:     user.Email,
 		Token:     user.Token,
 		Time:      int(end.Sub(now).Seconds()),
-		Admintype: user.Admintype,
+		AdminType: user.AdminType,
 		Status:    user.Status}
 }
 
@@ -200,31 +224,31 @@ func CheckToken(token string) bool {
 	return true
 }
 
-func GetSavePassword(userPassword string) string {
-	funcstr := config.DefaultEncryptAlgorithm
-	passFunc := config.PasswordFunc[funcstr].(func(string, int) string)
+func GetSavePassWord(UserPassWord string) string {
+	FuncStr := config.DefaultEncryptAlgorithm
+	PassFunc := config.PassWordFunc[FuncStr].(func(string, int) string)
 	salt := GetSalt()
 	num := rand.Intn(50) + 1
-	passstr := passFunc(Md5(Md5(userPassword)+salt), num)
-	return fmt.Sprintf("%s$%d$%s$%s", funcstr, num, salt, passstr)
+	PassStr := PassFunc(Md5(Md5(UserPassWord)+salt), num)
+	return fmt.Sprintf("%s$%d$%s$%s", FuncStr, num, salt, PassStr)
 }
 
-func VaildPassword(userPassword string, savePassword string) bool {
-	sPassword := strings.Split(savePassword, "$")
-	if len(sPassword) < 4 {
+func VaildPassWord(UserPassWord string, SavePassWord string) bool {
+	sPassWord := strings.Split(SavePassWord, "$")
+	if len(sPassWord) < 4 {
 		beego.Error("User password maybe save error.")
 		return false
 	}
-	function, snum, salt, password := sPassword[0], sPassword[1], sPassword[2], sPassword[3]
+	function, snum, salt, password := sPassWord[0], sPassWord[1], sPassWord[2], sPassWord[3]
 	num, _ := strconv.Atoi(snum)
-	tfunc, ok := config.PasswordFunc[function]
+	tfunc, ok := config.PassWordFunc[function]
 	if !ok {
 		beego.Error("Password function in passwordlist but not in passwordfunc map.")
 		return false
 	}
-	passFunc := tfunc.(func(string, int) string)
-	salted := AddSalt(userPassword, salt)
-	pass := passFunc(salted, num)
+	PassFunc := tfunc.(func(string, int) string)
+	salted := AddSalt(UserPassWord, salt)
+	pass := PassFunc(salted, num)
 	if pass == password {
 		return true
 	}
@@ -248,6 +272,6 @@ func GetSalt() string {
 	return string(salt)
 }
 
-func AddSalt(password string, salt string) string {
-	return Md5(Md5(password) + salt)
+func AddSalt(PassWord string, salt string) string {
+	return Md5(Md5(PassWord) + salt)
 }

@@ -13,9 +13,9 @@ type UserController struct {
 // @router /register [post]
 func (u *UserController) Register() {
 	email := u.GetString("email")
-	password := u.GetString("password")
+	PassWord := u.GetString("password")
 	ret := models.Response{Code: 200, Msg: ""}
-	err := models.RegsterUser(email, password)
+	err := models.RegsterUser(email, PassWord)
 	if err != nil {
 		ret.Msg = err.Error()
 	} else {
@@ -27,15 +27,15 @@ func (u *UserController) Register() {
 
 // @router /login [post]
 func (u *UserController) Login() {
-	email := u.GetString("eamil")
-	password := u.GetString("password")
+	Email := u.GetString("eamil")
+	PassWord := u.GetString("password")
 	ret := models.Response{Code: 200, Msg: ""}
-	err := models.VaildLogin(email, password)
+	err := models.VaildLogin(Email, PassWord)
 	if err != nil {
 		ret.Msg = err.Error()
 	} else {
-		models.GetToken(email)
-		ret.Data = models.GetUserJsonByEmail(email)
+		models.GetToken(Email)
+		ret.Data = models.GetUserJsonByEmail(Email)
 		ret.Msg = "登录成功"
 	}
 	u.Data["json"] = ret
@@ -58,20 +58,33 @@ func (u *UserController) Vaild() {
 }
 
 // @router /change [post]
-func (u *UserController) ChangePassword() {
+func (u *UserController) ChangePassWord() {
 	Email := u.GetString("email")
-	OldPassword := u.GetString("oldpassword")
+	OldPassWord := u.GetString("OldPassWord")
 	ret := models.Response{Code: 200, Msg: ""}
-	err := models.VaildLogin(Email, OldPassword)
+	err := models.VaildLogin(Email, OldPassWord)
 	if err == nil {
-		NewPassword := u.GetString("newpassword")
-		if models.ChangePd(Email, OldPassword, NewPassword) {
+		NewPassWord := u.GetString("NewPassWord")
+		if models.ChangePd(Email, OldPassWord, NewPassWord) {
 			ret.Data = models.GetUserJsonByEmail(Email)
 			ret.Msg = "修改成功"
 		}
 	} else {
 		ret.Msg = err.Error()
 	}
+	u.Data["json"] = ret
+	u.ServeJSON()
+}
+
+// @router /back [get]
+func (u *UserController) BackPwd() {
+	Email := u.GetString("email")
+	ret := models.Response{Code: 200, Msg: ""}
+	err := models.BackPassWord(Email)
+	if err != "send success!" {
+		beego.Error(err)
+	}
+	ret.Msg = err
 	u.Data["json"] = ret
 	u.ServeJSON()
 }
