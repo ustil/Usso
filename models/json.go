@@ -6,7 +6,7 @@ type Response struct {
 	Data interface{} `json:"data"`
 }
 
-type UserResponse struct { //
+type UserResponse struct {
 	Id        int    `json:"id"`
 	Email     string `json:"email"`
 	Token     string `json:"token"`
