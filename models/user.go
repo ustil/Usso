@@ -13,11 +13,10 @@ import (
 
 	"usso/config"
 
-	"github.com/satori/go.uuid"
-
 	"github.com/astaxie/beego"
 	"github.com/astaxie/beego/orm"
 	_ "github.com/go-sql-driver/mysql"
+	"github.com/satori/go.uuid"
 	"github.com/scorredoira/email"
 	"net/mail"
 	"net/smtp"
@@ -52,7 +51,7 @@ type User struct {
 }
 
 func init() {
-	orm.RegisterDataBase("default", "mysql", "root:123456@tcp(127.0.0.1:3306)/test?charset=utf8", 30)
+	orm.RegisterDataBase("default", config.Database, config.User+":"+config.PassWord+"@tcp("+config.Url+":"+config.Port+")/test?charset=utf8", 30)
 	orm.RegisterModel(new(User))
 	orm.RunSyncdb("default", false, true)
 	var users []*User
@@ -165,9 +164,9 @@ func ChangePd(UserEmail, OldPassWord, NewPassWord string) bool {
 	}
 }
 
-func BackPassWord(Email string) string {
+func BackPassWord(Email string) error {
 	if !CheckOrmByEmail(Email) {
-		return "email is not exits"
+		return beego.Error("email is not exits")
 	}
 	var PassWord string
 	if user, ok := CheckEmail(Email); ok {
@@ -179,9 +178,9 @@ func BackPassWord(Email string) string {
 	auth := smtp.PlainAuth("", config.FromMailAddress, config.FromMailPassWord, config.SendMailHost)
 	if err := email.Send(config.SendMailHost+config.SendMailPort, auth, m); err != nil {
 		beego.Error(err)
-		return "send fail!"
+		return beego.Error("send fail!")
 	}
-	return "send success!"
+	return nil
 }
 
 func GetUserJsonByEmail(email string) *UserResponse {

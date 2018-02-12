@@ -19,3 +19,12 @@ const (
 	SendMailHost     string = "smtp.qq.com"
 	SendMailPort     string = ":465"
 )
+
+const (
+	Database string = "mysql"
+	User     string = "root"
+	Host     string = "localhost"
+	Url      string = "127.0.0.1"
+	PassWord string = "123456"
+	Port     string = "3306"
+)
