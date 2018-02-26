@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"log"
 	"math/rand"
 	"regexp"
 	"strconv"
@@ -13,10 +14,11 @@ import (
 
 	"usso/config"
 
+	"github.com/satori/go.uuid"
+
 	"github.com/astaxie/beego"
 	"github.com/astaxie/beego/orm"
 	_ "github.com/go-sql-driver/mysql"
-	"github.com/satori/go.uuid"
 	"github.com/scorredoira/email"
 	"net/mail"
 	"net/smtp"
@@ -51,12 +53,9 @@ type User struct {
 }
 
 func init() {
-	orm.RegisterDataBase("default", config.Database, config.User+":"+config.PassWord+"@tcp("+config.Url+":"+config.Port+")/test?charset=utf8", 30)
-	orm.RegisterModel(new(User))
-	orm.RunSyncdb("default", false, true)
 	var users []*User
 	o := orm.NewOrm()
-	o.QueryTable("user").All(&users)
+	o.QueryTable(new(User)).All(&users)
 	now := time.Now()
 	for _, user := range users {
 		Users[user.Email] = user
@@ -75,16 +74,16 @@ func RegsterUser(email string, password string) error {
 	if len(password) >= 20 || len(password) < 6 {
 		return errors.New("密码长度过短")
 	}
-	EamilVaild, _ := regexp.MatchString(`^[a-zA-Z0-9_-]+@[a-zA-Z0-9_-]+(\.[a-zA-Z0-9_-]+)+$`, email)
-	if !EamilVaild {
+	eamilvaild, _ := regexp.MatchString(`^[a-zA-Z0-9_-]+@[a-zA-Z0-9_-]+(\.[a-zA-Z0-9_-]+)+$`, email)
+	if !eamilvaild {
 		return errors.New("邮箱不合法")
 	}
 	_, ok := CheckEmail(email)
 	if ok {
 		return errors.New("邮箱已注册")
 	}
-	SavePassWord := GetSavePassWord(password)
-	user := User{Email: email, PassWord: SavePassWord}
+	savePassWord := GetSavePassWord(password)
+	user := User{Email: email, PassWord: savePassWord}
 	o.Insert(&user)
 	Users[email] = &user
 	return nil
@@ -136,49 +135,49 @@ func GetToken(email string) string {
 	return token
 }
 
-func CheckOrmByEmail(Email string) bool {
-	user := User{Email: Email}
+func CheckOrmByEmail(email string) bool {
+	user := User{Email: email}
 	err := o.Read(&user, "Email")
 	if err != nil {
-		beego.Error("Get user info fail! email: " + Email)
+		beego.Error("Get user info fail! email: " + email)
 		return false
 	}
 	return true
 }
 
-func ChangePd(UserEmail, OldPassWord, NewPassWord string) bool {
-	user := User{Email: UserEmail}
-	if !CheckOrmByEmail(UserEmail) {
+func ChangePd(userEmail, oldPassWord, newPassWord string) bool {
+	user := User{Email: userEmail}
+	if !CheckOrmByEmail(userEmail) {
 		return false
-	} else if user.PassWord == OldPassWord {
-		if len(NewPassWord) > 6 && len(NewPassWord) <= 20 {
-			user.PassWord = NewPassWord
+	} else if user.PassWord == oldPassWord {
+		if len(newPassWord) > 6 && len(newPassWord) <= 20 {
+			user.PassWord = newPassWord
 			return true
 		} else {
-			beego.Error("新密码长度不合要求")
+			log.Fatal("新密码长度不合要求")
 			return false
 		}
 	} else {
-		beego.Error("原密码错误")
+		log.Fatal("原密码错误")
 		return false
 	}
 }
 
-func BackPassWord(Email string) error {
-	if !CheckOrmByEmail(Email) {
-		return beego.Error("email is not exits")
+func BackPassWord(email1 string) error {
+	if !CheckOrmByEmail(email1) {
+		return errors.New("email is not exits")
 	}
-	var PassWord string
-	if user, ok := CheckEmail(Email); ok {
-		PassWord = user.PassWord
+	var passWord string
+	if user, ok := CheckEmail(email1); ok {
+		passWord = user.PassWord
 	}
-	m := email.NewMessage("PassWord", "you PassWord is: "+PassWord)
+	m := email.NewMessage("PassWord", "you PassWord is: "+passWord)
 	m.From = mail.Address{Name: config.FromMailName, Address: config.FromMailAddress}
-	m.To = []string{Email}
+	m.To = []string{email1}
 	auth := smtp.PlainAuth("", config.FromMailAddress, config.FromMailPassWord, config.SendMailHost)
 	if err := email.Send(config.SendMailHost+config.SendMailPort, auth, m); err != nil {
 		beego.Error(err)
-		return beego.Error("send fail!")
+		return errors.New("send fail!")
 	}
 	return nil
 }
@@ -223,17 +222,17 @@ func CheckToken(token string) bool {
 	return true
 }
 
-func GetSavePassWord(UserPassWord string) string {
-	FuncStr := config.DefaultEncryptAlgorithm
-	PassFunc := config.PassWordFunc[FuncStr].(func(string, int) string)
+func GetSavePassWord(userPassWord string) string {
+	funcStr := config.DefaultEncryptAlgorithm
+	passFunc := config.PassWordFunc[funcStr].(func(string, int) string)
 	salt := GetSalt()
 	num := rand.Intn(50) + 1
-	PassStr := PassFunc(Md5(Md5(UserPassWord)+salt), num)
-	return fmt.Sprintf("%s$%d$%s$%s", FuncStr, num, salt, PassStr)
+	passStr := passFunc(Md5(Md5(userPassWord)+salt), num)
+	return fmt.Sprintf("%s$%d$%s$%s", funcStr, num, salt, passStr)
 }
 
-func VaildPassWord(UserPassWord string, SavePassWord string) bool {
-	sPassWord := strings.Split(SavePassWord, "$")
+func VaildPassWord(userPassWord string, savePassWord string) bool {
+	sPassWord := strings.Split(savePassWord, "$")
 	if len(sPassWord) < 4 {
 		beego.Error("User password maybe save error.")
 		return false
@@ -245,9 +244,9 @@ func VaildPassWord(UserPassWord string, SavePassWord string) bool {
 		beego.Error("Password function in passwordlist but not in passwordfunc map.")
 		return false
 	}
-	PassFunc := tfunc.(func(string, int) string)
-	salted := AddSalt(UserPassWord, salt)
-	pass := PassFunc(salted, num)
+	passFunc := tfunc.(func(string, int) string)
+	salted := AddSalt(userPassWord, salt)
+	pass := passFunc(salted, num)
 	if pass == password {
 		return true
 	}
@@ -255,9 +254,9 @@ func VaildPassWord(UserPassWord string, SavePassWord string) bool {
 }
 
 func Md5(text string) string {
-	Hash := md5.New()
-	Hash.Write([]byte(text))
-	return hex.EncodeToString(Hash.Sum(nil))
+	hash := md5.New()
+	hash.Write([]byte(text))
+	return hex.EncodeToString(hash.Sum(nil))
 }
 
 func GetSalt() string {
@@ -271,6 +270,6 @@ func GetSalt() string {
 	return string(salt)
 }
 
-func AddSalt(PassWord string, salt string) string {
-	return Md5(Md5(PassWord) + salt)
+func AddSalt(passWord string, salt string) string {
+	return Md5(Md5(passWord) + salt)
 }

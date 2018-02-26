@@ -13,7 +13,7 @@ func init() {
 	PassWordFunc["bcrypt"] = BcryptEncrypt
 }
 
-func BcryptEncrypt(password string, num int) string {
-	hashedPassword, _ := bcrypt.GenerateFromPassword([]byte(password), num)
-	return string(hashedPassword)
+func BcryptEncrypt(PassWord string, num int) string {
+	HashedPassWord, _ := bcrypt.GenerateFromPassword([]byte(PassWord), num)
+	return string(HashedPassWord)
 }
