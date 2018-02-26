@@ -154,11 +154,11 @@ func ChangePd(userEmail, oldPassWord, newPassWord string) bool {
 			user.PassWord = newPassWord
 			return true
 		} else {
-			log.Fatal("新密码长度不合要求")
+			debug.PrintStack()
 			return false
 		}
 	} else {
-		log.Fatal("原密码错误")
+		debug.PrintStack()
 		return false
 	}
 }
