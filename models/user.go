@@ -1,20 +1,22 @@
 package models
 
 import (
+	"crypto/aes"
+	"crypto/cipher"
 	"crypto/md5"
+	crand "crypto/rand"
 	"encoding/hex"
 	"errors"
 	"fmt"
-	"log"
-	"math/rand"
+	"io"
+	mrand "math/rand"
 	"regexp"
+	"runtime/debug"
 	"strconv"
 	"strings"
 	"time"
 
 	"usso/config"
-
-	"github.com/satori/go.uuid"
 
 	"github.com/astaxie/beego"
 	"github.com/astaxie/beego/orm"
@@ -29,6 +31,10 @@ var (
 	DefaultRowsLimit = -1
 	Users            map[string]*User
 	Tokens           map[string]*User
+)
+
+var (
+	commonkey = []byte("_reset_password_")
 )
 
 type User struct {
@@ -111,11 +117,44 @@ func Logout(token string) {
 	delete(Tokens, token)
 }
 
-func GetToken(email string) string {
-	tuuid, err := uuid.NewV4()
-	token := tuuid.String()
+func AesEncrypt(plaintext string) (string, error) {
+	block, err := aes.NewCipher(commonkey)
 	if err != nil {
-		beego.Error("Uuid create fail: " + err.Error())
+		return "", err
+	}
+	ciphertext := make([]byte, aes.BlockSize+len(plaintext))
+	iv := ciphertext[:aes.BlockSize]
+	if _, err := io.ReadFull(crand.Reader, iv); err != nil {
+		return "", err
+	}
+	cipher.NewCFBEncrypter(block, iv).XORKeyStream(ciphertext[aes.BlockSize:],
+		[]byte(plaintext))
+	return hex.EncodeToString(ciphertext), nil
+
+}
+func AesDecrypt(d string) (string, error) {
+	ciphertext, err := hex.DecodeString(d)
+	if err != nil {
+		return "", err
+	}
+	block, err := aes.NewCipher(commonkey)
+	if err != nil {
+		return "", err
+	}
+	if len(ciphertext) < aes.BlockSize {
+		return "", errors.New("ciphertext too short")
+	}
+	iv := ciphertext[:aes.BlockSize]
+	ciphertext = ciphertext[aes.BlockSize:]
+	fmt.Println(len(ciphertext), len(iv))
+	cipher.NewCFBDecrypter(block, iv).XORKeyStream(ciphertext, ciphertext)
+	return string(ciphertext), nil
+}
+
+func GetToken(email string) string {
+	token, err := AesEncrypt(email)
+	if err != nil {
+		errors.New("encrypt fail")
 		return ""
 	}
 	if CheckOrmByEmail(email) {
@@ -167,11 +206,9 @@ func BackPassWord(email1 string) error {
 	if !CheckOrmByEmail(email1) {
 		return errors.New("email is not exits")
 	}
-	var passWord string
-	if user, ok := CheckEmail(email1); ok {
-		passWord = user.PassWord
-	}
-	m := email.NewMessage("PassWord", "you PassWord is: "+passWord)
+	token := GetToken(email1)
+	setUrl := fmt.Sprintf("%s://%s/%s/?token=%s", config.Head, config.ServerUrl, config.Pattern, token)
+	m := email.NewMessage("exchange_url", setUrl)
 	m.From = mail.Address{Name: config.FromMailName, Address: config.FromMailAddress}
 	m.To = []string{email1}
 	auth := smtp.PlainAuth("", config.FromMailAddress, config.FromMailPassWord, config.SendMailHost)
@@ -226,7 +263,7 @@ func GetSavePassWord(userPassWord string) string {
 	funcStr := config.DefaultEncryptAlgorithm
 	passFunc := config.PassWordFunc[funcStr].(func(string, int) string)
 	salt := GetSalt()
-	num := rand.Intn(50) + 1
+	num := mrand.Intn(50) + 1
 	passStr := passFunc(Md5(Md5(userPassWord)+salt), num)
 	return fmt.Sprintf("%s$%d$%s$%s", funcStr, num, salt, passStr)
 }
@@ -263,7 +300,7 @@ func GetSalt() string {
 	str := "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
 	bytes := []byte(str)
 	salt := []byte{}
-	r := rand.New(rand.NewSource(time.Now().UnixNano()))
+	r := mrand.New(mrand.NewSource(time.Now().UnixNano()))
 	for i := 0; i < 15; i++ {
 		salt = append(salt, bytes[r.Intn(len(bytes))])
 	}

@@ -12,25 +12,25 @@ type UserController struct {
 
 // @router /register [post]
 func (u *UserController) Register() { //注册
-	email := u.GetString("email") //get input's email获取前端所传参数
+	email := u.GetString("email")
 	passWord := u.GetString("password")
 	ret := models.Response{Code: 200, Msg: ""}
-	err := models.RegsterUser(email, passWord) //注册用户,这个函数里面就可以写注册的规则等等。。
+	err := models.RegsterUser(email, passWord)
 	if err != nil {
 		ret.Msg = err.Error()
 	} else {
 		ret.Msg = "注册成功"
 	}
-	u.Data["json"] = ret //给出去的json数据存在了map里，只有当前端有{{.json时才会拿出来}}
-	u.ServeJSON()        //发送一个json回复response
+	u.Data["json"] = ret
+	u.ServeJSON()
 }
 
 // @router /login [post]
 func (u *UserController) Login() { //登陆
 	email := u.GetString("eamil")
 	passWord := u.GetString("password")
-	ret := models.Response{Code: 200, Msg: ""} //StatusCode=200,请求成功
-	err := models.VaildLogin(email, passWord)  //验证登陆是否正确
+	ret := models.Response{Code: 200, Msg: ""}
+	err := models.VaildLogin(email, passWord)
 	if err != nil {
 		ret.Msg = err.Error()
 	} else {
@@ -82,9 +82,27 @@ func (u *UserController) BackPwd() {
 	ret := models.Response{Code: 200, Msg: ""}
 	err := models.BackPassWord(email)
 	if err == nil {
-		ret.Msg = "密码已发送至你的邮箱"
+		ret.Msg = "链接已发送至你的邮箱"
 	} else {
 		ret.Msg = err.Error()
+	}
+	u.Data["json"] = ret
+	u.ServeJSON()
+}
+
+// @router /link [get]
+func (u *UserController) Link() {
+	ret := models.Response{Code: 200, Msg: ""}
+	token1 := u.GetString("token")
+	token, err := models.AesDecrypt(token1) //得到解密之后的token
+	if err != nil {
+		ret.Msg = err.Error()
+	} else {
+		if !models.CheckToken(token) {
+			ret.Msg = "链接失效"
+		} else {
+			ret.Msg = "token有效且解密成功"
+		}
 	}
 	u.Data["json"] = ret
 	u.ServeJSON()

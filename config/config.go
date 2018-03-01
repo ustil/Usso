@@ -28,3 +28,9 @@ const (
 	PassWord string = "123456"
 	Port     string = "3306"
 )
+
+const (
+	Head      string = "http"
+	ServerUrl string = "www.xxxx.com"
+	Pattern   string = "link"
+)
