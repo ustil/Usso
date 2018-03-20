@@ -21,6 +21,7 @@ import (
 	"github.com/astaxie/beego"
 	"github.com/astaxie/beego/orm"
 	_ "github.com/go-sql-driver/mysql"
+	"github.com/satori/go.uuid"
 	"github.com/scorredoira/email"
 	"net/mail"
 	"net/smtp"
@@ -31,11 +32,30 @@ var (
 	DefaultRowsLimit = -1
 	Users            map[string]*User
 	Tokens           map[string]*User
+	ResetTokens      map[string]*User
 )
 
 var (
 	commonkey = []byte("_reset_password_")
 )
+
+func Init() {
+	var users []*User
+	o := orm.NewOrm()
+	o.QueryTable(new(User)).All(&users)
+	now := time.Now()
+	for _, user := range users {
+		Users[user.Email] = user
+		if user.Token != "" {
+			if now.Before(user.Time) {
+				Tokens[user.Token] = user
+			} else {
+				user.Token = ""
+				o.Update(user, "Token")
+			}
+		}
+	}
+}
 
 type User struct {
 	Id       int
@@ -56,24 +76,6 @@ type User struct {
 
 	Created time.Time `orm:"auto_now_add;type(datetime)"`
 	Updated time.Time `orm:"auto_now;type(datetime)"`
-}
-
-func init() {
-	var users []*User
-	o := orm.NewOrm()
-	o.QueryTable(new(User)).All(&users)
-	now := time.Now()
-	for _, user := range users {
-		Users[user.Email] = user
-		if user.Token != "" {
-			if now.Before(user.Time) {
-				Tokens[user.Token] = user
-			} else {
-				user.Token = ""
-				o.Update(user, "Token")
-			}
-		}
-	}
 }
 
 func RegsterUser(email string, password string) error {
@@ -152,9 +154,10 @@ func AesDecrypt(d string) (string, error) {
 }
 
 func GetToken(email string) string {
-	token, err := AesEncrypt(email)
+	tuuid, err := uuid.NewV4()
+	token := tuuid.String()
 	if err != nil {
-		errors.New("encrypt fail")
+		beego.Error("Uuid create fail: " + err.Error())
 		return ""
 	}
 	if CheckOrmByEmail(email) {
@@ -169,9 +172,32 @@ func GetToken(email string) string {
 	now := time.Now()
 	user.Token = token
 	user.Time = now.Add(time.Second * time.Duration(config.DefaultTokenDay))
-	o.Update(&user, "Token", "Time")
+	o.Update(&user, "Token", "Time") //把生成的token存入数据库，每重新登陆一次对应的用户就重新生成一个token更新
 	Tokens[token] = &user
 	return token
+}
+
+func GetResetPassWordToken(email string) string {
+	resetToken, err := AesEncrypt(email)
+	if err != nil {
+		errors.New("encrypt fail")
+		return ""
+	}
+	if CheckOrmByEmail(email) {
+		return ""
+	}
+	user := User{Email: email}
+	if len(user.ResetPassToken) != 0 {
+		if CheckToken(user.ResetPassToken) {
+			delete(ResetTokens, user.ResetPassToken)
+		}
+	}
+	now := time.Now()
+	user.ResetPassToken = resetToken
+	user.ResetPassTime = now.Add(time.Second * time.Duration(config.DefaultResetTokenDay))
+	o.Update(&user, "ResetPassToken", "ResetPassTime")
+	ResetTokens[resetToken] = &user
+	return resetToken
 }
 
 func CheckOrmByEmail(email string) bool {
@@ -179,6 +205,16 @@ func CheckOrmByEmail(email string) bool {
 	err := o.Read(&user, "Email")
 	if err != nil {
 		beego.Error("Get user info fail! email: " + email)
+		return false
+	}
+	return true
+}
+
+func CheckOrmByToken(token string) bool {
+	user := User{Token: token}
+	err := o.Read(&user, "Token")
+	if err != nil {
+		beego.Error("Get user info fail! token: " + token)
 		return false
 	}
 	return true
@@ -202,12 +238,26 @@ func ChangePd(userEmail, oldPassWord, newPassWord string) bool {
 	}
 }
 
-func BackPassWord(email1 string) error {
+func ResetPassWord(email, newpassword string) bool {
+	user := User{Email: email}
+	if !CheckOrmByEmail(email) {
+		return false
+	} else if len(newpassword) > 6 && len(newpassword) <= 20 {
+		user.PassWord = newpassword
+		delete(Tokens, user.Token)
+		return true
+	} else {
+		debug.PrintStack()
+		return false
+	}
+}
+
+func BackPassWord(email1 string, reauestUrl string) error {
 	if !CheckOrmByEmail(email1) {
 		return errors.New("email is not exits")
 	}
-	token := GetToken(email1)
-	setUrl := fmt.Sprintf("%s://%s/%s/?token=%s", config.Head, config.ServerUrl, config.Pattern, token)
+	resetToken := GetResetPassWordToken(email1)
+	setUrl := fmt.Sprintf("%s://%s/%s/?resetToken=%s", config.Head, reauestUrl, config.Pattern, resetToken) //发送的链接
 	m := email.NewMessage("exchange_url", setUrl)
 	m.From = mail.Address{Name: config.FromMailName, Address: config.FromMailAddress}
 	m.To = []string{email1}
@@ -241,6 +291,11 @@ func GetUserJsonByToken(token string) *UserResponse {
 		Status:    user.Status}
 }
 
+func GetUserJsonByResetToken(resetToken string) *User {
+	user := ResetTokens[resetToken]
+	return user
+}
+
 func CheckEmail(email string) (*User, bool) {
 	user, ok := Users[email]
 	return user, ok
@@ -254,6 +309,19 @@ func CheckToken(token string) bool {
 	now := time.Now()
 	if now.Before(user.Time) {
 		delete(Tokens, token)
+		return false
+	}
+	return true
+}
+
+func CheckResetToken(resetToken string) bool {
+	user, ok := ResetTokens[resetToken]
+	if !ok {
+		return false
+	}
+	now := time.Now()
+	if now.Before(user.ResetPassTime) {
+		delete(ResetTokens, resetToken)
 		return false
 	}
 	return true
