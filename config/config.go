@@ -10,6 +10,7 @@ const (
 const (
 	DefaultEncryptAlgorithm string = "bcrypt"
 	DefaultTokenDay         uint32 = Day * 7
+	DefaultResetTokenDay    uint32 = Day
 )
 
 const (
@@ -21,10 +22,17 @@ const (
 )
 
 const (
-	Database string = "mysql"
-	User     string = "root"
-	Host     string = "localhost"
-	Url      string = "127.0.0.1"
-	PassWord string = "123456"
-	Port     string = "3306"
+	DatabaseDriver string = "mysql"
+	Database       string = "test"
+	User           string = "root"
+	Host           string = "localhost"
+	Url            string = "127.0.0.1"
+	PassWord       string = "123456"
+	Port           string = "3306"
+)
+
+const (
+	Head      string = "http"
+	ServerUrl string = "www.xxxx.com"
+	Pattern   string = "link"
 )
